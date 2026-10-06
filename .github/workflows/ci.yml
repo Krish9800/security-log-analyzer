@@ -1,0 +1,78 @@
+name: CI DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-typecheck:
+    name: Lint, Format & Static Type Analysis
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv and dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Ruff Format Check
+        run: ruff format --check .
+
+      - name: Ruff Lint Check
+        run: ruff check .
+
+      - name: Mypy Strict Type Analysis
+        run: mypy src
+
+  security-sast:
+    name: SAST Vulnerability Analysis (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: |
+          python -m pip install --upgrade pip uv
+          uv pip install --system bandit[toml]
+
+      - name: Run Bandit
+        run: bandit -c pyproject.toml -r src
+
+  test-and-coverage:
+    name: Test Suite & Coverage Gate (>=90%)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Run Pytest with Coverage
+        run: |
+          pytest --cov=src/loganalyzer --cov-report=term-missing --cov-report=xml --cov-fail-under=90

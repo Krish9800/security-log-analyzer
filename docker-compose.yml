@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  security-log-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: security-log-analyzer:latest
+    container_name: security-log-analyzer
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - LOGANALYZER_ENV=production
+      - LOGANALYZER_DEBUG=false
+      - LOGANALYZER_RATE_LIMIT=120/minute
+      - LOGANALYZER_CORS_ORIGINS=["http://localhost:3000"]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
