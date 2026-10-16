@@ -1,181 +1,182 @@
-# Security Log Analyzer
+# Security Log Analyzer (`log-analyzer`)
+
+Multi-Format Security Log Forensic Parser, Sliding-Window Threat Correlator, Time-Series Anomaly Detector, and MITRE ATT&CK Tagger.
 
 [![CI Pipeline](https://github.com/Krish9800/security-log-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/Krish9800/security-log-analyzer/actions)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
-[![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Type Checked: Mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](https://github.com/python/mypy)
-[![Security: Bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
-[![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-A high-performance, modular, SIEM-grade forensic analysis engine for security operations and threat hunting. Ingests heterogeneous system, web, network, and cloud logs, applies stateful sliding-window correlation, detects adversarial techniques mapped to **MITRE ATT&CK Enterprise Matrix**, and exports standardized alerts to ArcSight CEF, Markdown, and NDJSON.
-
----
-
-## Key Features
-
-- **Multi-Format Log Parsing**:
-  - Linux `auth.log` / `secure` (SSH authentication failures/successes, sudo elevation).
-  - Nginx / Apache W3C Combined Log Format (HTTP requests, status codes, query strings, user agents).
-  - Netfilter / UFW firewall logs (packet drops, TCP/UDP port mapping).
-  - Cloud SIEM NDJSON (structured event streams, AWS CloudTrail, container telemetry).
-- **Hardened Ingestion Sanitizer**:
-  - Active neutralization of CRLF log injection (`\r\n`), null-byte poisoning (`\0`), and ANSI terminal escape codes.
-- **Stateful Threat Correlation**:
-  - Sliding-window temporal ring buffer indexed by attacker IP to track burst-based attacks without memory exhaustion.
-  - Detectors:
-    - **T1110 (Brute Force)**: SSH and web authentication credential stuffing.
-    - **T1190 (Exploit Public-Facing Application)**: SQL Injection, Path Traversal, Cross-Site Scripting (XSS).
-    - **T1046 (Network Service Discovery)**: Horizontal and vertical port scanning.
-    - **T1078 (Valid Accounts / Privilege Escalation)**: Unauthorized `sudo` abuse and suspicious privilege elevation.
-- **Forensic Analytics & MITRE Mapping**:
-  - Attacker profiling, source IP aggregation, tactic timeline generation, and MITRE coverage matrices.
-- **Universal SIEM Exporters**:
-  - Micro Focus ArcSight Common Event Format (CEF:0) syslog lines.
-  - Detailed executive markdown forensic reports.
-  - Normalized NDJSON SIEM log streams.
-- **Interactive CLI & REST Microservice**:
-  - Rich-powered terminal dashboard (`loganalyzer`).
-  - Production-ready FastAPI service with OpenAPI documentation and rate limiting.
+[![Python: 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![CLI: Typer](https://img.shields.io/badge/CLI-Typer-green.svg)](https://typer.tiangolo.com/)
+[![MITRE ATT&CK: Tagged](https://img.shields.io/badge/MITRE-ATT%26CK%20Tagged-red.svg)](https://attack.mitre.org/)
 
 ---
 
-## Architecture Overview
+## Overview & Problem Statement
 
+During security incident response, analysts receive heterogeneous log exports from disparate infrastructure components—Linux authentication logs, web server access logs (Apache/Nginx), firewalls, and custom application event streams. Manual inspection of massive multi-gigabyte flat files is slow and prone to overlooking coordinated multi-stage attack patterns.
+
+**Security Log Analyzer** is a high-speed forensic log parsing and threat analysis utility. It auto-detects log formats, normalizes disparate records into unified time-series events, correlates suspicious activity using sliding time-windows, maps observed indicators to MITRE ATT&CK tactics, and generates structured forensic investigation reports.
+
+---
+
+## Architecture & Data Flow
+
+```mermaid
+flowchart TD
+    RawLog[Raw Security Log File] --> AutoDetector[Log Format Auto-Detector]
+
+    subgraph Parsing & Normalization
+        AutoDetector --> SyslogParser[RFC 3164 / 5424 Syslog Parser]
+        AutoDetector --> AuthParser[Linux /var/log/auth.log Parser]
+        AutoDetector --> WebParser[Apache Combined / Nginx Access Parser]
+        AutoDetector --> JSONParser[Structured JSON Event Parser]
+
+        SyslogParser --> EventModel[Unified Normalized Event Model]
+        AuthParser --> EventModel
+        WebParser --> EventModel
+        JSONParser --> EventModel
+    end
+
+    subgraph Detection & Correlation Engine
+        EventModel --> TimeSeries[Time-Series Sorting & Timeline Engine]
+        TimeSeries --> Correlator{Sliding-Window Threat Correlator}
+
+        Correlator --> BruteForce[Credential Stuffing / SSH Brute-Force]
+        Correlator --> WebAttacks[SQLi / XSS / Path Traversal Probing]
+        Correlator --> PrivEsc[Sudo / User Elevation Sequences]
+    end
+
+    subgraph Attribution & Reporting
+        BruteForce --> MITREMapper[MITRE ATT&CK Tagger: T1110, T1078, T1059]
+        WebAttacks --> MITREMapper
+        PrivEsc --> MITREMapper
+
+        MITREMapper --> Report[Forensic Incident Timeline & Report]
+        Report --> RichCLI[Typer CLI / Rich Terminal Visuals]
+        Report --> JSONExport[JSON / CSV Forensic Export]
+    end
 ```
-Raw Logs ──> Core Sanitizer ──> Parser Registry ──> Normalized LogEvents
-                                                           │
-                                                           ▼
-                                               Sliding-Window State Machine
-                                                           │
-                                                           ▼
-                                                Detection Rules Engine
-                                            (T1110, T1190, T1046, T1078)
-                                                           │
-                                                           ▼
-                                                Forensic Correlator
-                                                           │
-                      ┌────────────────────────────────────┼───────────────────────────────────┐
-                      ▼                                    ▼                                   ▼
-             ArcSight CEF Exporter               Markdown Forensic Report             FastAPI & Rich CLI
-```
 
 ---
 
-## Installation
+## Verified Features
 
-### Prerequisites
-- Python 3.11 or 3.12
-- `uv` (recommended) or standard `pip`
+- **Format Auto-Detection:** Automatically identifies and parses Syslog (RFC 3164 / 5424), Linux auth logs, Apache/Nginx combined access logs, and generic structured JSON.
+- **High-Speed Ingestion:** Streaming file processing handles large log dumps with low memory footprint.
+- **Sliding-Window Correlation:** Correlates events across timestamps to identify complex multi-stage attacks (e.g. 5 failed logins within 60s followed by an accepted sudo session).
+- **MITRE ATT&CK Tagger:** Tags detected anomalies with specific enterprise ATT&CK techniques (e.g., T1110.001, T1078, T1190).
+- **Statistical Aggregation:** Computes top source IPs, targeted usernames, HTTP status code distributions, and anomaly outlier scores.
+- **Dual Interface:** Typer CLI with rich terminal formatting, plus a headless FastAPI inspection service.
+
+---
+
+## Technology Stack
+
+- **Runtime:** Python 3.12+
+- **Data Validation:** Pydantic v2
+- **CLI Framework:** Typer & Rich
+- **API Framework:** FastAPI & Uvicorn
+- **Quality Gates:** Pytest, Ruff, Mypy Strict, Bandit
+
+---
+
+## Requirements & Installation
 
 ```bash
+# Clone the repository
 git clone https://github.com/Krish9800/security-log-analyzer.git
 cd security-log-analyzer
 
-# Create virtual environment and install in editable mode with development tools
+# Create and activate virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+
+# Install dependencies
+pip install -e .
 ```
 
 ---
 
-## Quickstart & Usage
+## Verified Usage Examples
 
-### 1. Command Line Interface (CLI)
+### 1. Command-Line Interface (CLI)
 
-#### Analyze Log Files
 ```bash
-# Analyze an auth.log and output to terminal
-loganalyzer analyze /var/log/auth.log
+# Inspect a log file to auto-detect format and record count
+log-analyzer inspect /var/log/auth.log
 
-# Export detected incidents to ArcSight CEF
-loganalyzer analyze /var/log/auth.log --format cef --output incidents.cef
+# Perform full forensic analysis and correlation on an authentication log
+log-analyzer analyze /var/log/auth.log
 
-# Export forensic summary report to Markdown
-loganalyzer analyze /var/log/nginx/access.log --format markdown --output report.md
+# Analyze a web server access log with JSON output export
+log-analyzer analyze /var/log/nginx/access.log --format json --output forensic_report.json
 
-# Output raw JSON incidents
-loganalyzer analyze /var/log/syslog --format json
+# List active correlation and forensic detection rules
+log-analyzer rules
 ```
 
-#### Inspect Parsed Events (Without Detection)
-```bash
-# Inspect first 20 parsed events with schema validation
-loganalyzer inspect /var/log/auth.log --limit 20
+Sample Forensic Summary Output:
 ```
+============================================================
+FORENSIC THREAT CORRELATION REPORT
+============================================================
+Total Events Processed: 14,820
+Correlated Threats Identified: 3
 
-#### List Available Threat Detection Rules
-```bash
-loganalyzer rules list
+[!] THREAT DETECTED: SSH Brute-Force Sequence (MITRE T1110.001)
+  Source IP: 203.0.113.42
+  Failed Attempts: 47 within 120s
+  Targeted Accounts: ['root', 'admin', 'ubuntu', 'deploy']
+
+[!] THREAT DETECTED: Suspicious Privilege Escalation (MITRE T1078)
+  User: deploy -> root via sudo
+  Timestamp: 2026-10-14 08:42:15 UTC
 ```
-
----
 
 ### 2. REST API Service
 
-#### Launch Server
 ```bash
-uvicorn loganalyzer.api.app:app --host 127.0.0.1 --port 8000 --reload
+# Start the forensic analyzer API
+uvicorn loganalyzer.api.app:app --host 127.0.0.1 --port 8000
 ```
 
-#### Endpoints
-- `GET /health`: Health probe and service status.
-- `GET /metrics`: Service runtime metrics.
-- `GET /rules`: List all registered detection rules.
-- `POST /analyze`: Ingest raw log text or structured events and execute forensic detection.
-- `POST /inspect`: Parse log lines into normalized `LogEvent` records.
-
-#### Example API Request
-```bash
-curl -X POST http://127.0.0.1:8000/analyze \
-  -H "Content-Type: application/json" \
-  -d '{
-    "raw_logs": "Oct 06 14:00:01 server sshd[100]: Failed password for invalid user admin from 198.51.100.1 port 52123 ssh2\nOct 06 14:00:02 server sshd[101]: Failed password for invalid user admin from 198.51.100.1 port 52124 ssh2\nOct 06 14:00:03 server sshd[102]: Failed password for invalid user admin from 198.51.100.1 port 52125 ssh2\nOct 06 14:00:04 server sshd[103]: Failed password for invalid user admin from 198.51.100.1 port 52126 ssh2\nOct 06 14:00:05 server sshd[104]: Failed password for invalid user admin from 198.51.100.1 port 52127 ssh2",
-    "parser_format": "auth_log"
-  }'
-```
+Endpoints available at `http://127.0.0.1:8000/docs`:
+- `GET /health` — Service health check
+- `GET /api/v1/rules` — List active correlation rules
+- `POST /api/v1/analyze` — Upload log file for forensic parsing
 
 ---
 
-## Docker Deployment
-
-The application includes a hardened, multi-stage rootless container setup.
+## Testing & Quality Gates
 
 ```bash
-# Build and run container
-docker compose up -d
+# Run unit and forensic parsing tests
+pytest --cov=loganalyzer --cov-report=term-missing
 
-# Verify container health
-docker compose ps
-curl http://127.0.0.1:8000/health
-```
-
----
-
-## Quality Gates & DevSecOps
-
-This project adheres to strict automated code quality and security verification:
-
-```bash
-# Code formatting check
-ruff format --check .
-
-# Linting and style analysis
+# Linting and static analysis
 ruff check .
-
-# Static type verification
-mypy src
-
-# Static application security testing (SAST)
-bandit -c pyproject.toml -r src
-
-# Full test suite with coverage gate (>=90%)
-pytest --cov=src/loganalyzer --cov-fail-under=90
+ruff format --check .
+mypy src/loganalyzer
 ```
 
 ---
 
-## License
+## Security Model & Threat Boundaries
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- **Log Injection Resistance:** Parsers escape terminal control sequences and line terminators to prevent log spoofing and terminal injection exploits.
+- **Offline Safe Parsing:** Log parsing operates strictly in memory without connecting to external services; internal IP addresses and usernames are never transmitted externally.
+
+---
+
+## Limitations & Known Issues
+
+- **Windows EVTX Files:** Supports text and JSON-exported Windows event logs; raw proprietary binary `.evtx` parsing requires pre-export to JSON/XML.
+- **Unstructured Custom Formats:** Non-standard application log formats without regular timestamp delimiters require custom regex rule definitions.
+
+---
+
+## License & Responsible Use
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+> [!NOTE]
+> Designed for incident responders, digital forensics analysts, and security operations engineers.
